@@ -1,0 +1,49 @@
+- hosts: nfs
+  become: yes
+  vars:
+    share_path: /mnt/nfsroot
+  tasks:
+    - name: install nfs-utils
+      yum:
+        name: nfs-utils
+        state: latest
+    - name: start and enable nfs
+      service:
+        name: nfs-server
+        state: started
+        enabled: yes
+    - name: configure /etc/exports
+      template:
+        src: /home/ansible/exports.j2
+        dest: /etc/exports
+      notify: modify exports
+  handlers:
+    - name: modify exports
+      command: exportfs -a
+      listen: modify exports
+
+- hosts: remote
+  become: yes
+  vars:
+    nfs_ip: "{{ hostvars['nfs']['ansible_default_ipv4']['address'] }}"
+    nfs_hostname: "{{ hostvars['nfs']['ansible_hostname']}}"
+  vars_files:
+    - /home/ansible/user-list.txt
+  tasks:
+    - name: configure hosts
+      template:
+        src: /home/ansible/etc.hosts.j2
+        dest: /etc/hosts
+    - name: create file
+      stat:
+        path: /opt/user-agreement.txt
+      register: filestat
+    - name: debug info
+      debug:
+        var: filestat
+    - name: create users
+      user:
+        name: "{{ item }}"
+      when: filestat.stat.exists
+      loop: "{{ users }}"
+   
